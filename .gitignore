@@ -38,6 +38,8 @@ dist/
 *.task
 !models/assets/pose_landmarker_full.task
 !models/assets/hand_landmarker.task
+!models/isl_csltr_continuous/**/best_model.pt
+!models/checkpoints/isolated/*.joblib
 !**/models/**/.gitkeep
 !**/models/README.md
 
