@@ -35,7 +35,7 @@ logger = logging.getLogger("train_twenty_five_class")
 
 DATA_PATH = PROJECT_ROOT / "data" / "processed" / "twenty_five_class_sequence" / "twenty_five_class_dataset.npz"
 ARTIFACTS_DIR = PROJECT_ROOT / "models" / "isl_csltr_continuous" / "twenty_five_class_sequence"
-ROOT_ARTIFACTS_DIR = Path(r"D:\Projects\models\isl_csltr_continuous\twenty_five_class_sequence")
+ROOT_ARTIFACTS_DIR = Path(r"D:\Projects\models\isl_csltr_continuous\twenty_five_class_sequence") if Path("D:/").exists() else None
 
 CLASS_NAMES = [
     "comb your hair",
@@ -242,7 +242,8 @@ def train():
     logger.info(f"Using compute device: {device}")
 
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    ROOT_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    if ROOT_ARTIFACTS_DIR:
+        ROOT_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
     if not DATA_PATH.exists():
         raise FileNotFoundError(f"Aggregated dataset not found at {DATA_PATH}. Run extract_twenty_five_class_features.py first.")
@@ -392,7 +393,8 @@ def train():
 
     # Save best_model.pt
     torch.save(best_state_dict, ARTIFACTS_DIR / "best_model.pt")
-    torch.save(best_state_dict, ROOT_ARTIFACTS_DIR / "best_model.pt")
+    if ROOT_ARTIFACTS_DIR:
+        torch.save(best_state_dict, ROOT_ARTIFACTS_DIR / "best_model.pt")
     logger.info(f"Saved best_model.pt to {ARTIFACTS_DIR / 'best_model.pt'}")
 
     # Save class_mapping.json
@@ -402,15 +404,17 @@ def train():
     }
     with open(ARTIFACTS_DIR / "class_mapping.json", "w", encoding="utf-8") as f:
         json.dump(class_mapping, f, indent=2)
-    with open(ROOT_ARTIFACTS_DIR / "class_mapping.json", "w", encoding="utf-8") as f:
-        json.dump(class_mapping, f, indent=2)
+    if ROOT_ARTIFACTS_DIR:
+        with open(ROOT_ARTIFACTS_DIR / "class_mapping.json", "w", encoding="utf-8") as f:
+            json.dump(class_mapping, f, indent=2)
 
     # Save model_config.json
     model_config = model.get_config()
     with open(ARTIFACTS_DIR / "model_config.json", "w", encoding="utf-8") as f:
         json.dump(model_config, f, indent=2)
-    with open(ROOT_ARTIFACTS_DIR / "model_config.json", "w", encoding="utf-8") as f:
-        json.dump(model_config, f, indent=2)
+    if ROOT_ARTIFACTS_DIR:
+        with open(ROOT_ARTIFACTS_DIR / "model_config.json", "w", encoding="utf-8") as f:
+            json.dump(model_config, f, indent=2)
 
     # Copy / update preprocessing_config.json
     prep_path = PROJECT_ROOT / "data" / "processed" / "twenty_five_class_sequence" / "preprocessing_config.json"
@@ -429,8 +433,9 @@ def train():
         }
     with open(ARTIFACTS_DIR / "preprocessing_config.json", "w", encoding="utf-8") as f:
         json.dump(prep_cfg, f, indent=2)
-    with open(ROOT_ARTIFACTS_DIR / "preprocessing_config.json", "w", encoding="utf-8") as f:
-        json.dump(prep_cfg, f, indent=2)
+    if ROOT_ARTIFACTS_DIR:
+        with open(ROOT_ARTIFACTS_DIR / "preprocessing_config.json", "w", encoding="utf-8") as f:
+            json.dump(prep_cfg, f, indent=2)
 
     # Save evaluation_metrics.json
     metrics = {
@@ -463,8 +468,9 @@ def train():
     }
     with open(ARTIFACTS_DIR / "evaluation_metrics.json", "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
-    with open(ROOT_ARTIFACTS_DIR / "evaluation_metrics.json", "w", encoding="utf-8") as f:
-        json.dump(metrics, f, indent=2)
+    if ROOT_ARTIFACTS_DIR:
+        with open(ROOT_ARTIFACTS_DIR / "evaluation_metrics.json", "w", encoding="utf-8") as f:
+            json.dump(metrics, f, indent=2)
 
     # Save test_predictions.json and training_history.json
     test_preds_summary = []
@@ -487,13 +493,15 @@ def train():
 
     with open(ARTIFACTS_DIR / "test_predictions.json", "w", encoding="utf-8") as f:
         json.dump(test_preds_summary, f, indent=2)
-    with open(ROOT_ARTIFACTS_DIR / "test_predictions.json", "w", encoding="utf-8") as f:
-        json.dump(test_preds_summary, f, indent=2)
+    if ROOT_ARTIFACTS_DIR:
+        with open(ROOT_ARTIFACTS_DIR / "test_predictions.json", "w", encoding="utf-8") as f:
+            json.dump(test_preds_summary, f, indent=2)
 
     with open(ARTIFACTS_DIR / "training_history.json", "w", encoding="utf-8") as f:
         json.dump(history, f, indent=2)
-    with open(ROOT_ARTIFACTS_DIR / "training_history.json", "w", encoding="utf-8") as f:
-        json.dump(history, f, indent=2)
+    if ROOT_ARTIFACTS_DIR:
+        with open(ROOT_ARTIFACTS_DIR / "training_history.json", "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2)
 
     logger.info("All 25-class artifacts successfully saved!")
 

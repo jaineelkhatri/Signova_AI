@@ -35,7 +35,7 @@ logger = logging.getLogger("train_five_class")
 
 DATA_PATH = PROJECT_ROOT / "data" / "processed" / "five_class_sequence" / "five_class_dataset.npz"
 ARTIFACTS_DIR = PROJECT_ROOT / "models" / "isl_csltr_continuous" / "five_class_sequence"
-ROOT_ARTIFACTS_DIR = Path(r"D:\Projects\models\isl_csltr_continuous\five_class_sequence")
+ROOT_ARTIFACTS_DIR = Path(r"D:\Projects\models\isl_csltr_continuous\five_class_sequence") if Path("D:/").exists() else None
 
 CLASS_NAMES = [
     "comb your hair",
@@ -190,7 +190,8 @@ def train():
     logger.info(f"Using compute device: {device}")
 
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    ROOT_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    if ROOT_ARTIFACTS_DIR:
+        ROOT_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
     # 1. Load data
     if not DATA_PATH.exists():
@@ -301,7 +302,8 @@ def train():
             no_improve_count = 0
             torch.save(model.state_dict(), best_checkpoint_path)
             # Also save to root artifacts mirror
-            torch.save(model.state_dict(), ROOT_ARTIFACTS_DIR / "best_model.pt")
+            if ROOT_ARTIFACTS_DIR:
+                torch.save(model.state_dict(), ROOT_ARTIFACTS_DIR / "best_model.pt")
         else:
             no_improve_count += 1
 
@@ -451,16 +453,17 @@ def train():
         json.dump(test_detail, f, indent=2)
 
     # Mirror to root
-    with open(ROOT_ARTIFACTS_DIR / "class_mapping.json", "w", encoding="utf-8") as f:
-        json.dump(class_mapping, f, indent=2)
-    with open(ROOT_ARTIFACTS_DIR / "model_config.json", "w", encoding="utf-8") as f:
-        json.dump(model_config, f, indent=2)
-    with open(ROOT_ARTIFACTS_DIR / "training_history.json", "w", encoding="utf-8") as f:
-        json.dump(history, f, indent=2)
-    with open(ROOT_ARTIFACTS_DIR / "evaluation_metrics.json", "w", encoding="utf-8") as f:
-        json.dump(eval_results, f, indent=2)
-    with open(ROOT_ARTIFACTS_DIR / "test_predictions.json", "w", encoding="utf-8") as f:
-        json.dump(test_detail, f, indent=2)
+    if ROOT_ARTIFACTS_DIR:
+        with open(ROOT_ARTIFACTS_DIR / "class_mapping.json", "w", encoding="utf-8") as f:
+            json.dump(class_mapping, f, indent=2)
+        with open(ROOT_ARTIFACTS_DIR / "model_config.json", "w", encoding="utf-8") as f:
+            json.dump(model_config, f, indent=2)
+        with open(ROOT_ARTIFACTS_DIR / "training_history.json", "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2)
+        with open(ROOT_ARTIFACTS_DIR / "evaluation_metrics.json", "w", encoding="utf-8") as f:
+            json.dump(eval_results, f, indent=2)
+        with open(ROOT_ARTIFACTS_DIR / "test_predictions.json", "w", encoding="utf-8") as f:
+            json.dump(test_detail, f, indent=2)
 
     # Copy preprocessing_config.json to artifacts directory
     prep_src = PROJECT_ROOT / "data" / "processed" / "five_class_sequence" / "preprocessing_config.json"
@@ -469,8 +472,9 @@ def train():
             prep_data = json.load(f_in)
         with open(ARTIFACTS_DIR / "preprocessing_config.json", "w", encoding="utf-8") as f_out:
             json.dump(prep_data, f_out, indent=2)
-        with open(ROOT_ARTIFACTS_DIR / "preprocessing_config.json", "w", encoding="utf-8") as f_out:
-            json.dump(prep_data, f_out, indent=2)
+        if ROOT_ARTIFACTS_DIR:
+            with open(ROOT_ARTIFACTS_DIR / "preprocessing_config.json", "w", encoding="utf-8") as f_out:
+                json.dump(prep_data, f_out, indent=2)
 
     model_file_size = (ARTIFACTS_DIR / "best_model.pt").stat().st_size
     logger.info(f"Model saved to {best_checkpoint_path} (Size: {model_file_size/1024:.1f} KB)")
