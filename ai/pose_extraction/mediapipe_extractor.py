@@ -219,6 +219,18 @@ def apply_hand_forward_fill(
     return reshaped.reshape(orig_shape)
 
 
+def _download_task_model(target_path: Path, url: str) -> None:
+    """Download official Google MediaPipe task model if absent."""
+    try:
+        import urllib.request
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Downloading MediaPipe model asset to {target_path} from {url}...")
+        urllib.request.urlretrieve(url, str(target_path))
+        logger.info(f"Successfully downloaded {target_path.name}")
+    except Exception as exc:
+        logger.warning(f"Failed to auto-download {target_path}: {exc}")
+
+
 # ---------------------------------------------------------------------------
 # 1. Modern Tasks Extractor (PoseLandmarker + HandLandmarker)
 # ---------------------------------------------------------------------------
@@ -240,6 +252,14 @@ class ModernMediaPipeExtractor:
 
         self.pose_model_path = Path(pose_model_path or DEFAULT_POSE_TASK_PATH).resolve()
         self.hand_model_path = Path(hand_model_path or DEFAULT_HAND_TASK_PATH).resolve()
+
+        POSE_TASK_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task"
+        HAND_TASK_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task"
+
+        if not self.pose_model_path.exists():
+            _download_task_model(self.pose_model_path, POSE_TASK_URL)
+        if not self.hand_model_path.exists():
+            _download_task_model(self.hand_model_path, HAND_TASK_URL)
 
         if not self.pose_model_path.exists():
             raise FileNotFoundError(f"Pose task model not found at: {self.pose_model_path}")
