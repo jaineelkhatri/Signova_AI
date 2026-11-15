@@ -119,30 +119,34 @@ export function useWebcam({
       // Multi-tier constraints ladder from optimal to most permissive
       const constraintTiers = [];
 
+      // Tier 1: User's explicitly chosen device (ideal, not exact, to avoid NotFoundError aborts)
       if (targetDeviceId) {
         constraintTiers.push({
           audio: false,
           video: {
-            deviceId: { exact: targetDeviceId },
+            deviceId: { ideal: targetDeviceId },
             width: { ideal: preferredWidth },
             height: { ideal: preferredHeight },
           },
         });
         constraintTiers.push({
           audio: false,
-          video: { deviceId: { exact: targetDeviceId } },
+          video: {
+            deviceId: { ideal: targetDeviceId },
+          },
         });
       }
 
+      // Tier 2: Optimal resolution (ideal, no facingMode which can fail on Windows desktop webcams)
       constraintTiers.push({
         audio: false,
         video: {
-          facingMode: "user",
           width: { ideal: preferredWidth },
           height: { ideal: preferredHeight },
         },
       });
 
+      // Tier 3: Standard 640x480 resolution
       constraintTiers.push({
         audio: false,
         video: {
@@ -151,7 +155,11 @@ export function useWebcam({
         },
       });
 
-      constraintTiers.push({ video: true, audio: false });
+      // Tier 4: Most permissive basic video constraint
+      constraintTiers.push({
+        audio: false,
+        video: true,
+      });
 
       try {
         let activeStream = null;
@@ -163,15 +171,15 @@ export function useWebcam({
             if (activeStream) break;
           } catch (tierErr) {
             lastError = tierErr;
+            // Only abort early if permission was explicitly denied by the user
             if (
               tierErr.name === "NotAllowedError" ||
-              tierErr.name === "PermissionDeniedError" ||
-              tierErr.name === "NotFoundError" ||
-              tierErr.name === "DevicesNotFoundError"
+              tierErr.name === "PermissionDeniedError"
             ) {
               throw tierErr;
             }
-            // OverconstrainedError, NotReadableError, TrackStartError: try next tier
+            // For any other error (OverconstrainedError, NotFoundError on constraint, NotReadableError),
+            // continue down the ladder to try simpler, more permissive constraints
           }
         }
 
@@ -217,12 +225,22 @@ export function useWebcam({
       } catch (err) {
         if (!isMountedRef.current) return;
 
+        // Reset target device if specific device failed
+        if (targetDeviceId) {
+          selectedDeviceIdRef.current = "";
+          setSelectedDeviceId("");
+        }
+
         if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
           setStatus(CAMERA_STATUS.PERMISSION_DENIED);
-          setErrorMessage("Camera access denied. Please click the lock or camera icon in your browser address bar to allow camera access, then click Retry.");
+          setErrorMessage(
+            "Camera access denied. Please click the camera or lock icon in your browser address bar to allow camera access, then click Retry."
+          );
         } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
           setStatus(CAMERA_STATUS.NOT_AVAILABLE);
-          setErrorMessage("No webcam detected. Please plug in or enable your camera and click Retry.");
+          setErrorMessage(
+            "No webcam detected. If your camera is plugged in or built-in, please close other tabs (e.g. http://127.0.0.1:5173) or apps holding the camera, check Windows Camera Settings, and click Retry."
+          );
         } else if (
           err.name === "NotReadableError" ||
           err.name === "TrackStartError" ||
@@ -230,7 +248,7 @@ export function useWebcam({
         ) {
           setStatus(CAMERA_STATUS.ERROR);
           setErrorMessage(
-            "Could not start video source. Your camera is in use by another application (e.g. Zoom, Teams, WhatsApp, or another browser tab) or blocked in Windows Camera Privacy Settings. Close other apps and click Retry."
+            "Could not start video source. Your camera is in use by another application (e.g. Zoom, Teams, WhatsApp, or another browser tab). Close other tabs/apps and click Retry."
           );
         } else {
           setStatus(CAMERA_STATUS.ERROR);
