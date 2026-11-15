@@ -96,6 +96,12 @@ export function useWebcam({
         });
         streamRef.current = null;
       }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+
+      // Small hardware unbind pause so Windows camera driver releases exclusive lock
+      await new Promise((resolve) => setTimeout(resolve, 80));
 
       if (isMountedRef.current) {
         setStatus(CAMERA_STATUS.REQUESTING_PERMISSION);
@@ -110,36 +116,67 @@ export function useWebcam({
         return;
       }
 
-      // Constraints with preferred resolution and fallback
-      const constraints = {
+      // Multi-tier constraints ladder from optimal to most permissive
+      const constraintTiers = [];
+
+      if (targetDeviceId) {
+        constraintTiers.push({
+          audio: false,
+          video: {
+            deviceId: { exact: targetDeviceId },
+            width: { ideal: preferredWidth },
+            height: { ideal: preferredHeight },
+          },
+        });
+        constraintTiers.push({
+          audio: false,
+          video: { deviceId: { exact: targetDeviceId } },
+        });
+      }
+
+      constraintTiers.push({
         audio: false,
-        video: targetDeviceId
-          ? {
-              deviceId: { exact: targetDeviceId },
-              width: { ideal: preferredWidth },
-              height: { ideal: preferredHeight },
-            }
-          : {
-              facingMode: "user",
-              width: { ideal: preferredWidth },
-              height: { ideal: preferredHeight },
-            },
-      };
+        video: {
+          facingMode: "user",
+          width: { ideal: preferredWidth },
+          height: { ideal: preferredHeight },
+        },
+      });
+
+      constraintTiers.push({
+        audio: false,
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
+      });
+
+      constraintTiers.push({ video: true, audio: false });
 
       try {
-        let activeStream;
-        try {
-          activeStream = await navigator.mediaDevices.getUserMedia(constraints);
-        } catch (initialErr) {
-          // If exact device or ideal resolution fails, fallback to basic video constraints
-          if (
-            initialErr.name === "OverconstrainedError" ||
-            initialErr.name === "ConstraintNotSatisfiedError"
-          ) {
-            activeStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-          } else {
-            throw initialErr;
+        let activeStream = null;
+        let lastError = null;
+
+        for (const tierConstraints of constraintTiers) {
+          try {
+            activeStream = await navigator.mediaDevices.getUserMedia(tierConstraints);
+            if (activeStream) break;
+          } catch (tierErr) {
+            lastError = tierErr;
+            if (
+              tierErr.name === "NotAllowedError" ||
+              tierErr.name === "PermissionDeniedError" ||
+              tierErr.name === "NotFoundError" ||
+              tierErr.name === "DevicesNotFoundError"
+            ) {
+              throw tierErr;
+            }
+            // OverconstrainedError, NotReadableError, TrackStartError: try next tier
           }
+        }
+
+        if (!activeStream && lastError) {
+          throw lastError;
         }
 
         if (!isMountedRef.current) {
@@ -182,10 +219,19 @@ export function useWebcam({
 
         if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
           setStatus(CAMERA_STATUS.PERMISSION_DENIED);
-          setErrorMessage("Camera access denied. Please grant camera permission in your browser and click Retry.");
+          setErrorMessage("Camera access denied. Please click the lock or camera icon in your browser address bar to allow camera access, then click Retry.");
         } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
           setStatus(CAMERA_STATUS.NOT_AVAILABLE);
-          setErrorMessage("No video input devices found on this device. Please plug in or enable a camera.");
+          setErrorMessage("No webcam detected. Please plug in or enable your camera and click Retry.");
+        } else if (
+          err.name === "NotReadableError" ||
+          err.name === "TrackStartError" ||
+          (err.message && err.message.toLowerCase().includes("could not start video source"))
+        ) {
+          setStatus(CAMERA_STATUS.ERROR);
+          setErrorMessage(
+            "Could not start video source. Your camera is in use by another application (e.g. Zoom, Teams, WhatsApp, or another browser tab) or blocked in Windows Camera Privacy Settings. Close other apps and click Retry."
+          );
         } else {
           setStatus(CAMERA_STATUS.ERROR);
           setErrorMessage(err.message || "Failed to start camera preview.");
