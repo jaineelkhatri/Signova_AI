@@ -1,6 +1,6 @@
 {
   "status": "trained_and_verified",
-  "timestamp": "2026-11-15 21:05:30",
+  "timestamp": "2026-11-16 21:18:11",
   "model_type": "TabularSequenceClassifier_RandomForest",
   "validation_accuracy": 0.5933,
   "optimal_rejection_threshold": 0.8,

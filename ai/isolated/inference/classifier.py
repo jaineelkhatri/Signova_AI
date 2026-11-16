@@ -402,6 +402,11 @@ class IsolatedSignRecognizer:
         min_tip_y = float(np.min(tip_pts[:, :, 1]))
         mean_tip_x = float(np.mean(mean_tip_pts[:, 0]))
         lateral_dist_tips = abs(mean_tip_x - nose_x)
+        lateral_dist_mouth = abs(mean_tip_x - mouth_x)
+
+        # Hand trajectory variance (std dev measures true motion amplitude, immune to noise)
+        std_x = float(np.std(wrist_pts[:, 0]))
+        std_y = float(np.std(wrist_pts[:, 1]))
 
         # Distances to mouth and nose
         tip_mouth_dists = np.linalg.norm(tip_pts - mouth_pts[:, np.newaxis, :], axis=-1)  # (N_act, 5)
@@ -439,9 +444,9 @@ class IsolatedSignRecognizer:
 
         logger.info(
             "Heuristic gesture analysis (N_act=%d): min_tip_to_mouth=%.3f, mean_tip_y=%.3f, "
-            "mouth_y=%.3f, min_hand_y=%.3f, lateral_w=%.3f, lateral_t=%.3f, mot_x=%.3f, mot_y=%.3f, away=%.3f",
+            "mouth_y=%.3f, min_hand_y=%.3f, lateral_w=%.3f, lateral_t=%.3f, std_x=%.3f, std_y=%.3f, away=%.3f",
             N_act, min_tip_to_mouth, mean_tip_y, mouth_y, min_hand_y, lateral_dist_wrist,
-            lateral_dist_tips, motion_x, motion_y, moving_away,
+            lateral_dist_tips, std_x, std_y, moving_away,
         )
 
         # -------------------------------------------------------------
@@ -449,11 +454,11 @@ class IsolatedSignRecognizer:
         # -------------------------------------------------------------
         # 1. Two-Handed Gestures
         if is_two_handed:
-            if total_motion < 0.20:
+            if std_x + std_y < 0.02:
                 pred = "help"
                 alt1, alt2 = "stop", "friend"
                 conf = 0.94
-            elif motion_y > motion_x * 1.1:
+            elif std_y > std_x * 1.1:
                 pred = "thank you"
                 alt1, alt2 = "welcome", "please"
                 conf = 0.91
@@ -462,101 +467,92 @@ class IsolatedSignRecognizer:
                 alt1, alt2 = "school", "hospital"
                 conf = 0.89
 
-        # 2. FOOD (Eat): Fingertips brought directly to lips / mouth (centered right at mouth level)
+        # 2. HELLO: Hand raised high beside temple / ear / cheek (above shoulder, laterally offset, fingers pointing up)
+        # Evaluated FIRST so hand-raising or waving is never falsely captured by food or water!
         elif (
-            (min_tip_to_mouth < 0.10 or min_tip_to_nose < 0.14)
-            and (mouth_y - 0.05 <= mean_tip_y <= mouth_y + 0.035)
-            and lateral_dist_tips < 0.12
-            and moving_away < 0.07
-        ):
-            pred = "food"
-            alt1, alt2 = "water", "please"
-            conf = 0.95
-
-        # 3. WATER (Drink): Hand at chin or tilted like cup / drinking (below mouth at chin level)
-        elif (
-            (min_tip_to_mouth < 0.20 or min_wrist_to_mouth < 0.24 or min_tip_to_nose < 0.22)
-            and (mouth_y + 0.02 <= mean_tip_y <= mouth_y + 0.18 or mouth_y <= min_hand_y <= mouth_y + 0.18)
-            and (lateral_dist_tips < 0.16 or lateral_dist_wrist < 0.16)
-            and moving_away < 0.07
-            and total_motion < 0.32
-        ):
-            pred = "water"
-            alt1, alt2 = "food", "thank you"
-            conf = 0.94
-
-        # 4. THANK YOU: Hand starts at chin / mouth and moves outward into open space
-        elif (dist_start < 0.18 or min_tip_to_mouth < 0.15) and moving_away > 0.08:
-            pred = "thank you"
-            alt1, alt2 = "welcome", "please"
-            conf = 0.93
-
-        # 5. HELLO: Hand raised high beside temple / ear / forehead (above mouth level and laterally offset)
-        elif (
-            (min_hand_y < mouth_y + 0.02 or min_tip_y < nose_y + 0.06 or mean_hand_y < shoulder_y - 0.02)
-            and (lateral_dist_wrist > 0.08 or lateral_dist_tips > 0.08)
-            and min_tip_to_mouth > 0.10
+            (min_tip_y < mouth_y + 0.04 or min_hand_y < mouth_y + 0.08 or mean_hand_y < shoulder_y)
+            and (lateral_dist_tips > 0.06 or lateral_dist_wrist > 0.06)
+            and mean_tip_y < mean_hand_y + 0.05
+            and (min_tip_to_mouth > 0.06 or lateral_dist_mouth > 0.06)
         ):
             pred = "hello"
             alt1, alt2 = "stop", "welcome"
             conf = 0.95
 
-        # 6. FATHER: Hand touches forehead / temple center
+        # 3. THANK YOU: Hand starts at chin / mouth and moves outward into open space
+        elif (dist_start < 0.16 or min_tip_to_mouth < 0.12) and moving_away > 0.06:
+            pred = "thank you"
+            alt1, alt2 = "welcome", "please"
+            conf = 0.93
+
+        # 4. FOOD (Eat): Fingertips brought directly to lips / mouth (centered at lips, tapping)
+        elif (
+            min_tip_to_mouth < 0.06
+            and lateral_dist_mouth < 0.07
+            and abs(mean_tip_y - mouth_y) < 0.05
+            and moving_away < 0.05
+        ):
+            pred = "food"
+            alt1, alt2 = "water", "please"
+            conf = 0.95
+
+        # 5. WATER (Drink): Hand at chin level directly below mouth (centered, tilted like cup)
+        elif (
+            lateral_dist_mouth < 0.09
+            and (mouth_y - 0.02 <= mean_tip_y <= mouth_y + 0.12)
+            and min_tip_y > nose_y - 0.02
+            and moving_away < 0.05
+        ):
+            pred = "water"
+            alt1, alt2 = "food", "thank you"
+            conf = 0.94
+
+        # 6. FATHER: Hand touches center of forehead / temple
         elif min_tip_y < nose_y - 0.02 and lateral_dist_tips < 0.12 and min_tip_to_mouth > 0.15:
             pred = "father"
             alt1, alt2 = "teacher", "hello"
             conf = 0.92
 
-        # 7. MOTHER: Hand touches cheek / corner of jaw
+        # 7. MOTHER: Hand touches cheek / corner of jaw steadily
         elif (
             (nose_y + 0.04 <= mean_tip_y <= nose_y + 0.16)
-            and lateral_dist_tips > 0.12
-            and min_tip_to_nose < 0.22
-            and moving_away < 0.07
+            and lateral_dist_tips > 0.10
+            and min_tip_to_nose < 0.20
+            and std_x < 0.025
+            and moving_away < 0.06
         ):
             pred = "mother"
             alt1, alt2 = "sister", "water"
             conf = 0.91
 
-        # 8. YES: Dominant vertical nodding motion at chest level (below mouth)
-        elif (
-            mean_hand_y > mouth_y + 0.08
-            and min_hand_y > nose_y
-            and motion_y > motion_x * 1.25
-            and motion_y > 0.05
-        ):
-            pred = "yes"
-            alt1, alt2 = "you", "student"
-            conf = 0.93
+        # 8. Chest-Level Gestures (mean_hand_y > mouth_y + 0.04)
+        elif mean_hand_y > mouth_y + 0.04:
+            # Steady open palm held at chest level -> STOP
+            if std_x < 0.018 and std_y < 0.018:
+                pred = "stop"
+                alt1, alt2 = "no", "yes"
+                conf = 0.92
+            # Dominant vertical nodding motion -> YES
+            elif std_y > std_x * 1.20 and std_y > 0.015:
+                pred = "yes"
+                alt1, alt2 = "you", "student"
+                conf = 0.93
+            # Dominant horizontal shaking motion -> NO
+            elif std_x > std_y * 1.20 and std_x > 0.015:
+                pred = "no"
+                alt1, alt2 = "sorry", "stop"
+                conf = 0.93
+            # Circular rubbing motion on chest -> PLEASE
+            elif std_x > 0.02 and std_y > 0.02:
+                pred = "please"
+                alt1, alt2 = "sorry", "thank you"
+                conf = 0.91
+            else:
+                pred = "you"
+                alt1, alt2 = "teacher", "student"
+                conf = 0.90
 
-        # 9. NO: Dominant horizontal shaking motion at chest level (below mouth)
-        elif (
-            mean_hand_y > mouth_y + 0.05
-            and motion_x > motion_y * 1.25
-            and motion_x > 0.05
-        ):
-            pred = "no"
-            alt1, alt2 = "sorry", "stop"
-            conf = 0.93
-
-        # 10. PLEASE: Circular rubbing motion on chest
-        elif (
-            mean_hand_y > shoulder_y - 0.06
-            and motion_x > 0.04
-            and motion_y > 0.04
-            and total_motion > 0.16
-        ):
-            pred = "please"
-            alt1, alt2 = "sorry", "thank you"
-            conf = 0.91
-
-        # 11. STOP: Steady open palm held at chest level
-        elif total_motion < 0.10 and mean_hand_y > mouth_y + 0.08:
-            pred = "stop"
-            alt1, alt2 = "no", "yes"
-            conf = 0.92
-
-        # 12. YOU: Default forward pointing gesture at chest level
+        # 9. Default pointing / neutral gesture
         else:
             pred = "you"
             alt1, alt2 = "teacher", "student"
